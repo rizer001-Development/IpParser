@@ -225,4 +225,3 @@ A detailed description of the syntax and settings is available in [`README.txt`]
 ## License
 
 This project is licensed under the [GNU AGPL v3.0](LICENSE).
-<!-- webhook test -->
