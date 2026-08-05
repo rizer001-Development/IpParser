@@ -3,6 +3,7 @@
 ![Java](https://img.shields.io/badge/Java-8%2B-orange)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![Development status](https://img.shields.io/badge/status-Beta-orange)
 
 > An open-source IP address parser for quickly and efficiently checking a huge number of IP addresses.
 
