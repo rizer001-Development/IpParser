@@ -1,0 +1,8 @@
+# Compiled Java classes
+*.class
+
+# IntelliJ IDEA project files
+.idea/
+
+# Runtime settings (auto-generated)
+settings.txt
