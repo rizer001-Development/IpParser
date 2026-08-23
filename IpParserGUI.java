@@ -1591,6 +1591,10 @@ public class IpParserGUI extends JFrame {
                 mcFilterMotd = lines.get(22).equals("1");
                 mcFilterMotdVal = lines.get(23);
             }
+            if (lines.size() >= 26) {
+                mcFilterPlayers = lines.get(24).equals("1");
+                mcFilterPlayersVal = lines.get(25);
+            }
             if (lines.size() >= 28) {
                 syntaxType = lines.get(26);
                 useCidr = lines.get(27).equals("1");
