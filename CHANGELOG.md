@@ -70,6 +70,46 @@ All core source files were reviewed for correctness, thread-safety, and edge cas
 
 ---
 
+## [2.0.0] — 2026-08-28
+
+### 🏗 Major re-architecture
+
+- **Gradle build** (wrapper committed, ShadowJar fat JAR) replaces the raw
+  `javac`/`build.bat` workflow. `./gradlew build` runs tests and produces a
+  single executable JAR.
+- **Layered package structure** under `dev.ipparser`: `core`, `pattern`,
+  `probe`, `scanner`, `storage`, `gui`, `gui.components`.
+- **Monolithic window split** — `IpParserGUI` (2 444 lines) decomposed into
+  `IpParserFrame`, `Theme`, `McFilters`, `Export`, `LogSettingsDialog`,
+  `IpSettingsDialog`, and the custom components package. The dark UI is kept.
+
+### 🔧 Bug fixes
+
+- **Race on scan counters**: `openCount`/`closedCount`/`externalCount` were
+  plain `volatile int` incremented from several parser threads, silently losing
+  updates. Now `AtomicLong`.
+- **Scanner duplication removed**: `PortScanner` and `McProbeScanner` (almost
+  identical pipelines) now share a single `AbstractScanner`, each keeping a thin
+  `probe(...)` implementation.
+
+### 🗄 Storage / portability
+
+- **SQLite settings store** (`AppDb`, `org.xerial:sqlite-jdbc` bundled)
+  replaces the fragile positional `settings.txt`.
+- **Dedicated file logs** (`FileLog`): central `ipparser-app.log` plus a
+  `scan-<timestamp>.log` per run, both under the app's own `logs/`.
+- **Portable home resolution** (`AppPaths`): the app never writes to the CWD -
+  everything lands under `data/` and `logs/` next to the JAR (or `-Dipparser.home=`).
+- **Gradle portable tasks**: `assemblePortable` builds a self-contained folder
+  (`build/portable/ip-parser-<version>/`) with `run.bat`/`run.sh` and zips it.
+
+### 🧪 Tests
+
+- First test suite (JUnit 5): `IpPattern`, `SyntaxConv`, `PortScanner.parsePorts`,
+  `McProbe`, `McFilters`, `Export`, `Storage` (SQLite + FileLog). 45 tests.
+
+---
+
 ## [1.0] — Initial Release
 
 - Initial commit with full IP Parser codebase

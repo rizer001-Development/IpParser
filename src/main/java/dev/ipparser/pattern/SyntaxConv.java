@@ -1,3 +1,5 @@
+package dev.ipparser.pattern;
+
 /**
  * Converts the user's IP syntax input (Type: ip / wildcard / regex) into the
  * internal Java-regex form consumed by {@link IpPattern}, honouring the
@@ -12,7 +14,7 @@
  * Returns the internal regex string, or null if the input is invalid for the
  * selected type / CIDR setting.
  */
-public class SyntaxConv {
+public final class SyntaxConv {
 
     private SyntaxConv() {
     }
@@ -93,8 +95,8 @@ public class SyntaxConv {
 
     /**
      * One wildcard octet -> regex part, or null if invalid.
-     * "192" -> "192"; "*" or "***" -> any 0-255 value; "1*0" -> "1\d0";
-     * "25*" -> "25\d". Digits and '*' only.
+     * "192" -> "192"; "*" or "***" -> any 0-255 value; "1*0" -> "1\\d0";
+     * "25*" -> "25\\d". Digits and '*' only.
      */
     private static String wildcardOctet(String o) {
         if (o == null || o.isEmpty() || !o.matches("[0-9*]+")) return null;

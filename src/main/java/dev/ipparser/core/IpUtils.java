@@ -1,3 +1,5 @@
+package dev.ipparser.core;
+
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -11,7 +13,10 @@ import java.util.List;
  * whether it belongs to the local LAN, and the human-readable external verdict.
  * Pure local logic - no external services required.
  */
-public class IpUtils {
+public final class IpUtils {
+
+    private IpUtils() {
+    }
 
     /**
      * Returns true if the IP is public ("white") - potentially reachable from the Internet.

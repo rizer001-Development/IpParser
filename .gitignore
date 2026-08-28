@@ -1,8 +1,21 @@
 # Compiled Java classes
 *.class
 
+# Gradle
+.gradle/
+build/
+out/
+
 # IntelliJ IDEA project files
 .idea/
+*.iml
 
-# Runtime settings (auto-generated)
+# Runtime settings (auto-generated; now stored in data/ SQLite)
 settings.txt
+data/
+logs/
+dist/
+
+# OS noise
+.DS_Store
+Thumbs.db

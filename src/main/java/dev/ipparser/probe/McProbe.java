@@ -1,3 +1,6 @@
+package dev.ipparser.probe;
+
+import dev.ipparser.core.PerfMonitor;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -14,21 +17,24 @@ import java.util.List;
  * and retrieves real server info: MOTD, version, online/max players, latency.
  * Pure standard JDK, no external libraries.
  */
-public class McProbe {
+public final class McProbe {
 
     /** Result of a Minecraft ping. */
     public static class Result {
-        public boolean success = false;
+        public boolean success;
         public String motd = "";
         public String version = "";
-        public int protocol = 0;
-        public int online = 0;
-        public int max = 0;
-        public boolean hasFavicon = false;
-        public long latencyMs = 0;
+        public int protocol;
+        public int online;
+        public int max;
+        public boolean hasFavicon;
+        public long latencyMs;
         public String error = "";
         public String brand = "";          // server brand, e.g. "Leaf", "Paper", "Vanilla"
         public List<String> players = new ArrayList<>(); // player sample names (if any)
+    }
+
+    private McProbe() {
     }
 
     /**
@@ -153,11 +159,11 @@ public class McProbe {
 
     /** Known server software names used as prefixes in version strings. */
     private static final String[] KNOWN_BRANDS = {
-        "paper", "purpur", "spigot", "craftbukkit", "bukkit", "vanilla", "fabric",
-        "forge", "neoforge", "fml", "leaves", "leaf", "folia", "pufferfish",
-        "velocity", "bungeecord", "waterfall", "arclight", "mohist", "catserver",
-        "magma", "yatopia", "tuinity", "flamepaper", "sportpaper", "panda", "gale",
-        "quilt", "krypton", "crucible", "diamondfire"
+            "paper", "purpur", "spigot", "craftbukkit", "bukkit", "vanilla", "fabric",
+            "forge", "neoforge", "fml", "leaves", "leaf", "folia", "pufferfish",
+            "velocity", "bungeecord", "waterfall", "arclight", "mohist", "catserver",
+            "magma", "yatopia", "tuinity", "flamepaper", "sportpaper", "panda", "gale",
+            "quilt", "krypton", "crucible", "diamondfire"
     };
 
     /**
@@ -392,7 +398,7 @@ public class McProbe {
     }
 
     /** Removes Minecraft section color codes (§X). */
-    private static String stripColorCodes(String s) {
+    public static String stripColorCodes(String s) {
         if (s.indexOf('\u00A7') < 0) return s;
         StringBuilder sb = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
@@ -406,8 +412,11 @@ public class McProbe {
         return sb.toString();
     }
 
-    /** Decodes common JSON escapes including unicode escapes (color codes etc). */
-    private static String unescape(String s) {
+    /**
+     * Decodes common JSON escapes including unicode escapes (color codes etc).
+     * Package-private so tests can verify it.
+     */
+    static String unescape(String s) {
         if (s.indexOf('\\') < 0) return s;
         StringBuilder sb = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {

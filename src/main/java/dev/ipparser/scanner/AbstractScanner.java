@@ -1,3 +1,5 @@
+package dev.ipparser.scanner;
+
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -6,25 +8,32 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Multithreaded Minecraft server scanner.
+ * Three-stage scan pipeline shared by the Telnet and Minecraft scanners.
  *
  * THREE SEPARATE thread pools run simultaneously at maximum speed:
- *  - GENERATORS (CPU threads): expand the regex/CIDR octet lists into IP:port
- *    targets and push them into a bounded task queue (blocking put = natural
- *    backpressure, NO busy waiting and NO artificial sleeps).
- *  - NETWORK WORKERS (network threads): pull targets and run the Minecraft
- *    ping over the network (blocking I/O). These are NOT CPU threads: their
- *    count is independent of the CPU thread count and can go up to 1024.
- *  - PARSERS (CPU threads): pull raw probe results and run the callback
+ *  - GENERATORS (CPU threads): expand the regex/CIDR octet lists into
+ *    IP:port targets and push them into a bounded task queue (blocking put =
+ *    natural backpressure - NO busy waiting and NO artificial sleeps).
+ *  - NETWORK WORKERS (network threads): pull targets and run the 
+ *    {@link #probe(String, int, int)} network call (blocking I/O). These are
+ *    NOT CPU threads: their count is independent of the CPU thread count and
+ *    can go up to 1024.
+ *  - PARSERS (CPU threads): pull raw probe results and invoke the listener
  *    (counting, stats, log formatting).
  *
- * Iteration order is IP-major: all ports of one IP are probed first, then the
- * next IP. Targets are generated lazily, so huge ranges never freeze the UI.
+ * The three stages are decoupled by bounded queues, so generation never blocks
+ * parsing and parsing always has work the moment results arrive. Memory stays
+ * constant (bounded queues) no matter how large the range is, and the UI is
+ * never blocked: all work runs in background daemon threads.
+ * Iteration order is IP-major: all ports of one IP first, then the next IP.
+ *
+ * @param <R> the type of a "raw" probe/socket result handed to the listeners.
  */
-public class McProbeScanner {
+public abstract class AbstractScanner<R> {
 
-    public interface ScanCallback {
-        void onResult(String ip, int port, McProbe.Result probe);
+    /** Receives results, progress and completion notifications. */
+    public interface Listener<R> {
+        void onResult(String ip, int port, R result);
         void onProgress(long scanned, long total);
         void onFinished();
     }
@@ -38,11 +47,13 @@ public class McProbeScanner {
     private final AtomicInteger activeNetwork = new AtomicInteger(0);
     private final AtomicLong scannedCount = new AtomicLong(0);
     private final LinkedBlockingQueue<Target> taskQueue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
-    private final LinkedBlockingQueue<RawResult> resultQueue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
+    private final LinkedBlockingQueue<RawResult<R>> resultQueue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
 
-    private Thread[] generatorThreads = new Thread[0];
-    private Thread[] networkThreads = new Thread[0];
-    private Thread[] parserThreads = new Thread[0];
+    private final String poolPrefix;
+
+    private volatile Thread[] generatorThreads = new Thread[0];
+    private volatile Thread[] networkThreads = new Thread[0];
+    private volatile Thread[] parserThreads = new Thread[0];
 
     /** One scan target (IP + port). */
     private static final class Target {
@@ -56,33 +67,47 @@ public class McProbeScanner {
     }
 
     /** A raw probe result waiting for CPU-side processing. */
-    private static final class RawResult {
+    private static final class RawResult<R> {
         final String ip;
         final int port;
-        final McProbe.Result probe;
+        final R result;
 
-        RawResult(String ip, int port, McProbe.Result probe) {
+        RawResult(String ip, int port, R result) {
             this.ip = ip;
             this.port = port;
-            this.probe = probe;
+            this.result = result;
         }
     }
 
+    protected AbstractScanner(String poolPrefix) {
+        this.poolPrefix = poolPrefix;
+    }
+
     /**
-     * Scans every IP produced by the syntax blocks with the Minecraft ping
-     * protocol. Returns immediately; all work runs in background threads.
+     * Performs the network/IO probe for a single IP:port and returns a raw
+     * result. Called on network worker threads.
+     */
+    protected abstract R probe(String ip, int port, int timeoutMs);
+
+    /**
+     * Scans every IP produced by the syntax blocks, on every port in range.
+     * Returns immediately; all work runs in background threads.
      *
      * @param blocks       list of address blocks, each 4 octet value lists
      *                     (from IpPattern.blocks)
+     * @param startPort    first port (inclusive)
+     * @param endPort      last port (inclusive)
+     * @param timeoutMs    per-connection timeout
      * @param parseThreads CPU threads that process results
      * @param genThreads   CPU threads that generate IPs from the blocks
-     * @param netThreads   network threads that run the pings
+     * @param netThreads   network threads that run the probes
+     * @param listener     progress / result / completion callbacks
      */
     public void startScan(List<List<List<Integer>>> blocks, int startPort, int endPort,
                           int timeoutMs, int parseThreads, int genThreads, int netThreads,
-                          ScanCallback callback) {
+                          Listener<R> listener) {
         if (blocks == null || blocks.isEmpty()) {
-            callback.onFinished();
+            listener.onFinished();
             return;
         }
         running.set(true);
@@ -95,7 +120,7 @@ public class McProbeScanner {
         long totalTargets = countTargets(blocks, startPort, endPort);
         if (totalTargets <= 0) {
             running.set(false);
-            callback.onFinished();
+            listener.onFinished();
             return;
         }
         long totalIps = countIps(blocks);
@@ -106,39 +131,42 @@ public class McProbeScanner {
         activeGenerators.set(genCount);
         activeNetwork.set(netCount);
 
-        generatorThreads = new Thread[genCount];
+        Thread[] gen = new Thread[genCount];
         for (int t = 0; t < genCount; t++) {
             final int slice = t;
             final long from = totalIps * slice / genCount;
             final long to = totalIps * (slice + 1) / genCount;
-            generatorThreads[t] = new Thread(() ->
-                            generateRange(blocks, from, to, startPort, endPort),
-                    "mc-gen-" + t);
-            generatorThreads[t].setDaemon(true);
+            gen[t] = new Thread(() -> generateRange(blocks, from, to, startPort, endPort),
+                    poolPrefix + "-gen-" + t);
+            gen[t].setDaemon(true);
         }
+        generatorThreads = gen;
 
-        networkThreads = new Thread[netCount];
+        Thread[] net = new Thread[netCount];
         for (int t = 0; t < netCount; t++) {
-            networkThreads[t] = new Thread(() -> networkLoop(timeoutMs), "mc-net-" + t);
-            networkThreads[t].setDaemon(true);
+            net[t] = new Thread(() -> networkLoop(timeoutMs), poolPrefix + "-net-" + t);
+            net[t].setDaemon(true);
         }
+        networkThreads = net;
 
-        parserThreads = new Thread[parseCount];
+        Thread[] parse = new Thread[parseCount];
         for (int t = 0; t < parseCount; t++) {
-            parserThreads[t] = new Thread(() -> parseLoop(callback, totalTargets), "mc-parser-" + t);
-            parserThreads[t].setDaemon(true);
+            parse[t] = new Thread(() -> parseLoop(listener, totalTargets), poolPrefix + "-parser-" + t);
+            parse[t].setDaemon(true);
         }
+        parserThreads = parse;
 
-        for (Thread g : generatorThreads) g.start();
-        for (Thread n : networkThreads) n.start();
-        for (Thread p : parserThreads) p.start();
+        for (Thread g : gen) g.start();
+        for (Thread n : net) n.start();
+        for (Thread p : parse) p.start();
 
+        // Finisher: waits for all three pools, then reports done.
         Thread finisher = new Thread(() -> {
-            for (Thread g : generatorThreads) joinQuietly(g);
-            for (Thread n : networkThreads) joinQuietly(n);
-            for (Thread p : parserThreads) joinQuietly(p);
-            callback.onFinished();
-        }, "mc-finisher");
+            for (Thread g : gen) joinQuietly(g);
+            for (Thread n : net) joinQuietly(n);
+            for (Thread p : parse) joinQuietly(p);
+            listener.onFinished();
+        }, poolPrefix + "-finisher");
         finisher.setDaemon(true);
         finisher.start();
     }
@@ -165,7 +193,7 @@ public class McProbeScanner {
         }
     }
 
-    /** One network worker: runs the Minecraft ping, hands raw results to the CPU parsers. */
+    /** One network worker: runs the probe, hands raw results to the CPU parsers. */
     private void networkLoop(int timeoutMs) {
         try {
             while (running.get()) {
@@ -181,10 +209,11 @@ public class McProbeScanner {
                     }
                     continue;
                 }
-                McProbe.Result probe = McProbe.ping(t.ip, t.port, timeoutMs);
+                if (!running.get()) return; // stopped: drop the target
+                R result = probe(t.ip, t.port, timeoutMs);
                 if (!running.get()) return; // stopped: drop the result
                 try {
-                    resultQueue.put(new RawResult(t.ip, t.port, probe));
+                    resultQueue.put(new RawResult<>(t.ip, t.port, result));
                 } catch (InterruptedException e) {
                     return;
                 }
@@ -197,9 +226,9 @@ public class McProbeScanner {
     }
 
     /** One CPU parser: processes raw results, counts progress. */
-    private void parseLoop(ScanCallback callback, long totalTargets) {
+    private void parseLoop(Listener<R> listener, long totalTargets) {
         while (running.get()) {
-            RawResult raw;
+            RawResult<R> raw;
             try {
                 raw = resultQueue.poll(50, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
@@ -211,9 +240,9 @@ public class McProbeScanner {
                 }
                 continue;
             }
-            callback.onResult(raw.ip, raw.port, raw.probe);
+            listener.onResult(raw.ip, raw.port, raw.result);
             long done = scannedCount.incrementAndGet();
-            callback.onProgress(done, totalTargets);
+            listener.onProgress(done, totalTargets);
         }
     }
 
@@ -261,6 +290,7 @@ public class McProbeScanner {
         return countIps(blocks) * (long) (endPort - startPort + 1);
     }
 
+    /** Stops the running scan. Safe to call at any time and from any thread. */
     public void stop() {
         running.set(false);
         for (Thread g : generatorThreads) {
@@ -272,6 +302,10 @@ public class McProbeScanner {
         for (Thread p : parserThreads) {
             if (p != null) p.interrupt();
         }
+    }
+
+    public boolean isRunning() {
+        return running.get();
     }
 
     private static void joinQuietly(Thread t) {

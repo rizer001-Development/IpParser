@@ -1,3 +1,5 @@
+package dev.ipparser.pattern;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -8,21 +10,21 @@ import java.util.regex.Pattern;
  *
  * The syntax field accepts a Java regex describing IPv4 addresses: 4 octets
  * (each 0-255) separated by dots. CIDR blocks can be written INSIDE the regex,
- * with regex-escaped dots (95\.31\.0\.0/16) or plain dots (95.31.0.0/16), and
+ * with regex-escaped dots (95\\.31\\.0\\.0/16) or plain dots (95.31.0.0/16), and
  * several ranges can be combined with top-level "|" alternation.
  * Anchors (^ and $) at the very ends are optional. There is NO limit on the
  * number of generated addresses.
  *
  * Examples:
- *   "95\.31\.\d{1,3}\.\d"            → third octet 0-255, fourth 0-9   (2560 IPs)
- *   "95\.31\.0\.0/16"                → 95.31.0.0 … 95.31.255.255       (65536 IPs)
+ *   "95\\.31\\.\\d{1,3}\\.\\d"            → third octet 0-255, fourth 0-9   (2560 IPs)
+ *   "95\\.31\\.0\\.0/16"                → 95.31.0.0 … 95.31.255.255       (65536 IPs)
  *   "95.31.0.0/16"                   → same block, plain-dot CIDR       (65536 IPs)
- *   "^192\.168\.1\.0/24$"            → 192.168.1.0 … 192.168.1.255     (256 IPs)
- *   "95\.31\.0\.0/16|10\.0\.0\.0/8"  → both blocks combined            (16.8M IPs)
- *   "192\.168\.1\.\d"                → 192.168.1.0 … 192.168.1.9       (10 IPs)
- *   "172\.16\.1\d\d\.1"              → 172.16.100.1 … 172.16.199.1     (100 IPs)
+ *   "^192\\.168\\.1\\.0/24$"            → 192.168.1.0 … 192.168.1.255     (256 IPs)
+ *   "95\\.31\\.0\\.0/16|10\\.0\\.0\\.0/8"  → both blocks combined            (16.8M IPs)
+ *   "192\\.168\\.1\\.\\d"                → 192.168.1.0 … 192.168.1.9       (10 IPs)
+ *   "172\\.16\\.1\\d\\d\\.1"              → 172.16.100.1 … 172.16.199.1     (100 IPs)
  */
-public class IpPattern {
+public final class IpPattern {
 
     private IpPattern() {
     }
@@ -31,7 +33,7 @@ public class IpPattern {
      * Splits a regex into top-level "|" alternatives (outside groups and
      * character classes). Used so CIDR blocks can be combined with alternation.
      */
-    private static List<String> splitTopLevelAlternation(String s) {
+    static List<String> splitTopLevelAlternation(String s) {
         List<String> parts = new ArrayList<>();
         StringBuilder cur = new StringBuilder();
         int depth = 0;
@@ -319,7 +321,8 @@ public class IpPattern {
     }
 
     /** structureOk with an explicit CIDR flag. */
-    public static boolean structureOk(String input, boolean allowCidr) {        if (input == null || input.trim().isEmpty()) return false;
+    public static boolean structureOk(String input, boolean allowCidr) {
+        if (input == null || input.trim().isEmpty()) return false;
         String t = unwrapOuterGroup(input.trim());
         List<String> alts = splitTopLevelAlternation(t);
         for (String alt : alts) {
@@ -413,9 +416,9 @@ public class IpPattern {
 
     /**
      * Splits a regex into octet parts on unescaped dots that are outside
-     * character classes. Handles both \. and . separators.
+     * character classes. Handles both \\. and . separators.
      */
-    private static List<String> splitOctets(String regex) {
+    static List<String> splitOctets(String regex) {
         List<String> parts = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         boolean inClass = false;

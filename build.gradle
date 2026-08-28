@@ -1,0 +1,140 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.gradleup.shadow' version '9.0.0'
+}
+
+group = 'dev.ipparser'
+version = '2.0.0'
+
+def appMainClass = project.findProperty('ipparser.app.mainClass') as String ?: 'dev.ipparser.gui.Main'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    // Java 17 target for a good balance of APIs and portability.
+    // Runtime (JRE 17+) is enough; no external toolchain required beyond the JDK used to build.
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    // SQLite database for persistence (settings/logs directory).
+    implementation 'org.xerial:sqlite-jdbc:3.46.1.3'
+
+    testImplementation platform('org.junit:junit-bom:5.11.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = appMainClass
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes(
+                'Main-Class': appMainClass,
+                'Implementation-Title': 'IP Parser',
+                'Implementation-Version': project.version,
+                'Automatic-Module-Name': 'dev.ipparser'
+        )
+    }
+    archiveBaseName = 'ip-parser'
+}
+
+// ---------- Fat / shaded jar (single executable archive) ----------
+tasks.named('shadowJar') {
+    archiveBaseName = 'ip-parser'
+    archiveClassifier = 'all'
+    mergeServiceFiles()
+}
+
+build {
+    dependsOn tasks.named('shadowJar')
+}
+
+// ---------- Tests ----------
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+}
+
+// ---------- Portable distribution ----------
+//
+// Produces a fully self-contained portable folder + zip archive:
+//   build/portable/ip-parser-<version>/
+//     ip-parser-<version>.jar        (shaded fat jar, sqlite-jdbc bundled)
+//     lib/util/                      (placeholders)
+//     logs/                          (own run directory, created at launch)
+//     data/                          (SQLite DB + settings, created at launch)
+//     run.bat / run.sh               (auto-detect java, works from that folder)
+//     README-PORTABLE.txt
+// and
+//   build/portable/ip-parser-<version>.zip
+//
+// Everything runs from the folder the jar is in, independent of the CWD.
+def portableLayout = { FileTreeBuilder t, String jarName, String version -> }
+
+tasks.register('preparePortable', Copy) {
+    dependsOn tasks.named('shadowJar')
+    into layout.buildDirectory.dir('portable/ip-parser-' + project.version)
+
+    // fat jar
+    from(tasks.named('shadowJar').flatMap { it.archiveFile }) {
+        rename { name -> 'ip-parser-' + project.version + '-all.jar' }
+    }
+
+    // launcher scripts + portable README
+    from('src/portable') {
+        include 'run.bat', 'run.sh', 'README-PORTABLE.txt'
+        rename { name -> name == 'README-PORTABLE.txt' ? 'README.txt' : name }
+    }
+
+    doLast {
+        ['logs', 'data'].each { d ->
+            File dir = new File(destinationDir, d)
+            dir.mkdirs()
+            File keep = new File(dir, '.gitkeep')
+            if (!keep.exists()) keep.write('')
+        }
+    }
+}
+
+tasks.register('buildPortable') {
+    dependsOn tasks.named('preparePortable')
+    description = 'Assembles the self-contained portable distribution (folder + zip).'
+}
+
+tasks.register('portableZip', Zip) {
+    dependsOn tasks.named('preparePortable')
+    archiveBaseName = 'ip-parser'
+    archiveVersion = project.version
+    archiveClassifier = 'portable'
+    destinationDirectory = layout.buildDirectory.dir('portable')
+    from layout.buildDirectory.dir('portable/ip-parser-' + project.version)
+    into('ip-parser-' + project.version)
+    entryCompression = ZipEntryCompression.DEFLATED
+}
+
+tasks.register('assemblePortable') {
+    dependsOn tasks.named('preparePortable'), tasks.named('portableZip')
+    description = 'Builds portable folder at build/portable and its zip archive.'
+}
+
+// Make `./gradlew build` also produce the portable layout.
+tasks.named('assemble') {
+    dependsOn tasks.named('assemblePortable')
+}
+
+// Convenience: clean all generated artifacts incl. portable output.
+tasks.register('cleanPortable') {
+    delete layout.buildDirectory.dir('portable')
+}
+
+defaultTasks 'build'

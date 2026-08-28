@@ -1,3 +1,5 @@
+package dev.ipparser.core;
+
 import com.sun.management.OperatingSystemMXBean;
 import java.lang.management.ManagementFactory;
 import java.util.concurrent.atomic.AtomicLong;
@@ -7,9 +9,11 @@ import java.util.concurrent.atomic.AtomicLong;
  *  - bytes sent/received by this app (instrumented at the socket level)
  *  - process CPU load
  *  - JVM heap (RAM) usage
- * Pure standard JDK (com.sun.management is part of the JDK).
+ *
+ * Implemented as a set of process-wide counters (a single instance per JVM is
+ * what the app needs). {@code com.sun.management} is part of the standard JDK.
  */
-public class PerfMonitor {
+public final class PerfMonitor {
 
     private static final OperatingSystemMXBean OS =
             (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
@@ -22,8 +26,8 @@ public class PerfMonitor {
     private static final AtomicLong recv = new AtomicLong(0);
     private static final AtomicLong lastSent = new AtomicLong(0);
     private static final AtomicLong lastRecv = new AtomicLong(0);
-    private static volatile long sentRate = 0; // bytes/sec
-    private static volatile long recvRate = 0;
+    private static volatile long sentRate; // bytes/sec
+    private static volatile long recvRate;
     private static volatile long lastTickNanos = System.nanoTime();
 
     private PerfMonitor() {
