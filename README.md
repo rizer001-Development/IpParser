@@ -12,7 +12,7 @@ Hundreds of millions of addresses are processed without freezing the UI: address
 
 ---
 
-### 📄 Organization Docs
+### Organization Docs
 
 [![Guide](https://img.shields.io/badge/Guide-rizer001--Development-00AEFF)](https://github.com/rizer001-Development/.github/blob/main/GUIDE.md) · [![Contributing](https://img.shields.io/badge/Contributing-rizer001--Development-4CAF50)](https://github.com/rizer001-Development/.github/blob/main/CONTRIBUTING.md) · [![Security](https://img.shields.io/badge/Security-rizer001--Development-D9534F)](https://github.com/rizer001-Development/.github/blob/main/SECURITY.md) · [![Code of Conduct](https://img.shields.io/badge/Code%20of%20Conduct-rizer001--Development-5BC0DE)](https://github.com/rizer001-Development/.github/blob/main/CODE_OF_CONDUCT.md)
 
@@ -20,19 +20,19 @@ Hundreds of millions of addresses are processed without freezing the UI: address
 
 ## Features
 
-- 🔢 **Flexible target syntax**: `ip`, `wildcard`, `regex` + **CIDR** inside the expression.
-- 📋 **Three input modes**: single pattern, list of patterns, file.
-- 📊 **Live volume gauge** — approximate IP count and ETA while typing.
-- 🌐 **Two scan modes**: Telnet (open TCP port) and Minecraft (Server List Ping).
-- 🚪 **Single port or range** (`2000` or `2000-2010`).
-- ✅ **Two result statuses**: port open/closed locally; reachable from the outside.
-- ⚡ **Maximum speed**: three independent thread pools (generation → network → parsing), up to **1024** network threads.
-- 🧠 **Lazy address generation** — even `0.0.0.0/0` does not freeze the UI.
-- 📈 **Process monitor**: CPU, RAM, in/out traffic in real time.
-- 🔎 **Minecraft log filters** (online / version / brand / MOTD / player list).
-- 📄 **Export results** to `.txt`.
-- 🗄️ **SQLite settings database** — persisted in the app's own `data/settings.db`.
-- 📁 **Per-scan log files** in `logs/`, next to a central `ipparser-app.log`.
+- **Flexible target syntax**: `ip`, `wildcard`, `regex` + **CIDR** inside the expression.
+- **Three input modes**: single pattern, list of patterns, file.
+- **Live volume gauge** — approximate IP count and ETA while typing.
+- **Two scan modes**: Telnet (open TCP port) and Minecraft (Server List Ping).
+- **Single port or range** (`2000` or `2000-2010`).
+- **Two result statuses**: port open/closed locally; reachable from the outside.
+- **Maximum speed**: three independent thread pools (generation → network → parsing), up to **1024** network threads.
+- **Lazy address generation** — even `0.0.0.0/0` does not freeze the UI.
+- **Process monitor**: CPU, RAM, in/out traffic in real time.
+- **Minecraft log filters** (online / version / brand / MOTD / player list).
+- **Export results** to `.txt`.
+- **SQLite settings database** — persisted in the app's own `data/settings.db`.
+- **Per-scan log files** in `logs/`, next to a central `ipparser-app.log`.
 
 ---
 
