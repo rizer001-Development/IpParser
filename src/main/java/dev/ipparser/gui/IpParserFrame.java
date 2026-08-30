@@ -167,6 +167,8 @@ public class IpParserFrame extends JFrame {
     public IpParserFrame() {
         super("IP Parser - IP and port scanner");
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        java.net.URL iconUrl = IpParserFrame.class.getResource("/app-icon.png");
+        if (iconUrl != null) setIconImage(new javax.swing.ImageIcon(iconUrl).getImage());
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
