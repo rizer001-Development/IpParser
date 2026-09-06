@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'dev.ipparser'
-version = '2.0.0'
+version = '1.1.1'
 
 def appMainClass = project.findProperty('ipparser.app.mainClass') as String ?: 'dev.ipparser.gui.Main'
 
