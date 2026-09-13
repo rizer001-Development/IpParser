@@ -77,6 +77,13 @@ struct App {
     error_msg: Option<String>,
     confirm_large_scan: Option<u64>, // Some(total_targets) when asking
 
+    // Working copies for the two settings dialogs, so edits only take effect
+    // on Apply (Cancel discards them). Initialized when the dialog opens.
+    log_settings_edit: LogConfig,
+    ip_edit_type: String,
+    ip_edit_mode: String,
+    ip_edit_cidr: bool,
+
     // ----- perf tick -----
     last_perf: Instant,
 
@@ -120,6 +127,10 @@ impl App {
             show_log_settings: false,
             error_msg: None,
             confirm_large_scan: None,
+            log_settings_edit: LogConfig::default(),
+            ip_edit_type: "regex".to_string(),
+            ip_edit_mode: "Single".to_string(),
+            ip_edit_cidr: true,
             last_perf: Instant::now(),
             scale_valid: false,
             scale_count: 0,
@@ -301,6 +312,9 @@ impl App {
         }
 
         if ui.button("⚙").on_hover_text("IP parsing settings").clicked() {
+            self.ip_edit_type = self.syntax_type.clone();
+            self.ip_edit_mode = self.syntax_mode.clone();
+            self.ip_edit_cidr = self.use_cidr;
             self.show_ip_settings = true;
         }
     }
@@ -315,6 +329,7 @@ impl App {
                         .on_hover_text("Log settings and MC-probe log filters")
                         .clicked()
                     {
+                        self.log_settings_edit = self.log_config.clone();
                         self.show_log_settings = true;
                     }
                 });
@@ -1412,43 +1427,41 @@ fn ip_settings_dialog(app: &mut App, ui: &mut egui::Ui) -> bool {
         .show(ui, |ui| {
             muted_label(ui, "Type");
             egui::ComboBox::from_id_salt("ip_type")
-                .selected_text(app.syntax_type.as_str())
+                .selected_text(app.ip_edit_type.as_str())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut app.syntax_type, "ip".to_string(), "ip");
-                    ui.selectable_value(&mut app.syntax_type, "wildcard".to_string(), "wildcard");
-                    ui.selectable_value(&mut app.syntax_type, "regex".to_string(), "regex");
+                    ui.selectable_value(&mut app.ip_edit_type, "ip".to_string(), "ip");
+                    ui.selectable_value(&mut app.ip_edit_type, "wildcard".to_string(), "wildcard");
+                    ui.selectable_value(&mut app.ip_edit_type, "regex".to_string(), "regex");
                 });
             ui.end_row();
 
             muted_label(ui, "Input mode");
             egui::ComboBox::from_id_salt("ip_mode")
-                .selected_text(app.syntax_mode.as_str())
+                .selected_text(app.ip_edit_mode.as_str())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut app.syntax_mode, "Single".to_string(), "Single");
-                    ui.selectable_value(&mut app.syntax_mode, "List".to_string(), "List");
-                    ui.selectable_value(&mut app.syntax_mode, "File".to_string(), "File");
+                    ui.selectable_value(&mut app.ip_edit_mode, "Single".to_string(), "Single");
+                    ui.selectable_value(&mut app.ip_edit_mode, "List".to_string(), "List");
+                    ui.selectable_value(&mut app.ip_edit_mode, "File".to_string(), "File");
                 });
             ui.end_row();
 
             muted_label(ui, "Use CIDR");
-            let mut cidr_yes = app.use_cidr;
             egui::ComboBox::from_id_salt("ip_cidr")
-                .selected_text(if cidr_yes { "yes" } else { "no" })
+                .selected_text(if app.ip_edit_cidr { "yes" } else { "no" })
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut cidr_yes, false, "no");
-                    ui.selectable_value(&mut cidr_yes, true, "yes");
+                    ui.selectable_value(&mut app.ip_edit_cidr, false, "no");
+                    ui.selectable_value(&mut app.ip_edit_cidr, true, "yes");
                 });
-            app.use_cidr = cidr_yes;
             ui.end_row();
         });
 
     // hint
-    let cidr_hint = if app.use_cidr {
+    let cidr_hint = if app.ip_edit_cidr {
         "  |  CIDR: 95.31.158.9/24 or 95.31.***.*/8"
     } else {
         ""
     };
-    let hint = match app.syntax_type.as_str() {
+    let hint = match app.ip_edit_type.as_str() {
         "ip" => format!("Full IP, e.g. 95.31.158.9{}", cidr_hint),
         "wildcard" => format!("* = any number, e.g. 95.31.***.*{}", cidr_hint),
         _ => format!("Java regex, e.g. ^95\\.31\\.\\d{{1,3}}\\.\\d${}", cidr_hint),
@@ -1470,6 +1483,9 @@ fn ip_settings_dialog(app: &mut App, ui: &mut egui::Ui) -> bool {
                 .button(RichText::new("Apply").color(Color32::WHITE))
                 .clicked()
             {
+                app.syntax_type = app.ip_edit_type.clone();
+                app.syntax_mode = app.ip_edit_mode.clone();
+                app.use_cidr = app.ip_edit_cidr;
                 app.save_settings();
                 app.update_scale();
                 close = true;
@@ -1480,18 +1496,16 @@ fn ip_settings_dialog(app: &mut App, ui: &mut egui::Ui) -> bool {
 }
 
 fn log_settings_dialog(app: &mut App, ui: &mut egui::Ui) -> bool {
-    let mut config = app.log_config.clone();
-
     ui.columns(2, |cols| {
         panel(&mut cols[0], theme::BG_PANEL, 12, |ui| {
             ui.label(RichText::new("Logs settings").color(theme::ACCENT).strong());
             ui.add_space(4.0);
-            ui.checkbox(&mut config.log_open, "Log available IP/Port connections");
-            ui.checkbox(&mut config.log_closed, "Log closed IP/Port connections");
-            ui.checkbox(&mut config.log_timeout, "Log timed out IP/Port connections");
-            ui.checkbox(&mut config.log_error, "Log errored IP/Port connections");
-            ui.checkbox(&mut config.log_actions, "Log actions (e.g. change IP regex)");
-            ui.checkbox(&mut config.external, "Status 2: port reachable from outside (public IP)");
+            ui.checkbox(&mut app.log_settings_edit.log_open, "Log available IP/Port connections");
+            ui.checkbox(&mut app.log_settings_edit.log_closed, "Log closed IP/Port connections");
+            ui.checkbox(&mut app.log_settings_edit.log_timeout, "Log timed out IP/Port connections");
+            ui.checkbox(&mut app.log_settings_edit.log_error, "Log errored IP/Port connections");
+            ui.checkbox(&mut app.log_settings_edit.log_actions, "Log actions (e.g. change IP regex)");
+            ui.checkbox(&mut app.log_settings_edit.external, "Status 2: port reachable from outside (public IP)");
         });
 
         panel(&mut cols[1], theme::BG_PANEL, 12, |ui| {
@@ -1499,15 +1513,15 @@ fn log_settings_dialog(app: &mut App, ui: &mut egui::Ui) -> bool {
             ui.add_space(4.0);
 
             // online
-            filter_row_online(ui, &mut config.mc);
+            filter_row_online(ui, &mut app.log_settings_edit.mc);
             // version
-            filter_row_version(ui, &mut config.mc);
+            filter_row_version(ui, &mut app.log_settings_edit.mc);
             // brand
-            filter_row_brand(ui, &mut config.mc);
+            filter_row_brand(ui, &mut app.log_settings_edit.mc);
             // motd
-            filter_row_motd(ui, &mut config.mc);
+            filter_row_motd(ui, &mut app.log_settings_edit.mc);
             // players
-            filter_row_players(ui, &mut config.mc);
+            filter_row_players(ui, &mut app.log_settings_edit.mc);
 
             ui.add_space(4.0);
             ui.label(
@@ -1532,7 +1546,16 @@ fn log_settings_dialog(app: &mut App, ui: &mut egui::Ui) -> bool {
                 .button(RichText::new("Apply").color(Color32::WHITE))
                 .clicked()
             {
-                app.log_config = config;
+                {
+                    let mc = &mut app.log_settings_edit.mc;
+                    // Empty value = filter disabled (matches the Java apply()).
+                    mc.online = mc.online && !mc.online_val.trim().is_empty();
+                    mc.version = mc.version && !mc.version_val.trim().is_empty();
+                    mc.brand = mc.brand && !mc.brand_val.trim().is_empty();
+                    mc.motd = mc.motd && !mc.motd_val.trim().is_empty();
+                    mc.players = mc.players && !mc.players_val.trim().is_empty();
+                }
+                app.log_config = app.log_settings_edit.clone();
                 app.save_settings();
                 close = true;
             }
