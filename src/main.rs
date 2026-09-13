@@ -138,17 +138,43 @@ impl App {
     // ================= UI ROOT =================
 
     fn build_ui(&mut self, ui: &mut egui::Ui) {
-        egui::Frame::NONE
-            .fill(theme::BG_ROOT)
-            .inner_margin(egui::Margin::same(12))
+        // Top: header + settings. Bottom: buttons + monitor + status.
+        // Center: the log fills the remaining space. Using real panels keeps
+        // the bottom controls pinned and visible (a ScrollArea in a plain
+        // vertical layout would otherwise swallow all remaining height).
+        egui::Panel::top("top_panel")
+            .frame(
+                egui::Frame::NONE
+                    .fill(theme::BG_ROOT)
+                    .inner_margin(egui::Margin::symmetric(12, 12)),
+            )
+            .show_separator_line(false)
             .show(ui, |ui| {
                 self.header(ui);
                 ui.add_space(10.0);
                 self.settings_panel(ui);
+            });
+
+        egui::Panel::bottom("bottom_panel")
+            .frame(
+                egui::Frame::NONE
+                    .fill(theme::BG_ROOT)
+                    .inner_margin(egui::Margin::symmetric(12, 12)),
+            )
+            .show_separator_line(false)
+            .show(ui, |ui| {
+                self.bottom_panel(ui);
+            });
+
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::NONE
+                    .fill(theme::BG_ROOT)
+                    .inner_margin(egui::Margin::symmetric(12, 0)),
+            )
+            .show(ui, |ui| {
                 ui.add_space(10.0);
                 self.log_panel(ui);
-                ui.add_space(10.0);
-                self.bottom_panel(ui);
             });
     }
 
