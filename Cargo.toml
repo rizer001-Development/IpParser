@@ -1,0 +1,22 @@
+[package]
+name = "ip-parser"
+version = "3.0.0"
+edition = "2021"
+description = "IP Parser - pattern-based IPv4 scanner and TCP port checker (Rust)"
+license = "AGPL-3.0"
+
+[dependencies]
+eframe = "0.36"
+egui = "0.36"
+ecolor = "0.36"
+regex = "1"
+crossbeam-channel = "0.5"
+rusqlite = { version = "0.37", features = ["bundled"] }
+rfd = "0.17"
+sysinfo = "0.37"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

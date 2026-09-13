@@ -1,12 +1,12 @@
 # IpParser
 
-![Java](https://img.shields.io/badge/Java-17%2B-orange)
-![Build](https://img.shields.io/badge/build-Gradle-green)
+![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange)
+![Build](https://img.shields.io/badge/build-Cargo-green)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
 > An open-source IP parser for quickly and efficiently checking a huge number of IP addresses.
 
-**IpParser** — a portable IP-range TCP port scanner with a dark-themed Swing GUI. It expands a Java regex (or a CIDR block) into IPv4 addresses and checks the specified TCP port(s) on each. It can also ping Minecraft servers via the official Server List Ping protocol and show MOTD, version, online players and brand.
+**IpParser** — a portable IP-range TCP port scanner with a dark-themed GUI. It expands a regex (or a CIDR block) into IPv4 addresses and checks the specified TCP port(s) on each. It can also ping Minecraft servers via the official Server List Ping protocol and show MOTD, version, online players and brand.
 
 Hundreds of millions of addresses are processed without freezing the UI: addresses are generated *on the fly* in background threads while memory usage stays constant thanks to bounded queues.
 
@@ -26,7 +26,7 @@ Hundreds of millions of addresses are processed without freezing the UI: address
 - **Two scan modes**: Telnet (open TCP port) and Minecraft (Server List Ping).
 - **Single port or range** (`2000` or `2000-2010`).
 - **Two result statuses**: port open/closed locally; reachable from the outside.
-- **Maximum speed**: three independent thread pools (generation → network → parsing), up to **1024** network threads.
+- **Maximum speed**: three independent thread stages (generation → network → forward), up to **1024** network threads.
 - **Lazy address generation** — even `0.0.0.0/0` does not freeze the UI.
 - **Process monitor**: CPU, RAM, in/out traffic in real time.
 - **Minecraft log filters** (online / version / brand / MOTD / player list).
@@ -38,81 +38,85 @@ Hundreds of millions of addresses are processed without freezing the UI: address
 
 ## Requirements
 
-- **Java 17 or newer** (JRE is enough to run; a JDK is needed to build).
-- **No external libraries at runtime** — everything (including SQLite) is bundled into a single fat JAR.
+- **Rust 1.85+** (stable) with a C toolchain for the bundled SQLite:
+  - **Windows**: the MSVC toolchain (`stable-x86_64-pc-windows-msvc`) with Visual Studio Build Tools, or the GNU toolchain with MinGW-w64 `gcc`.
+  - **Linux / macOS**: `gcc` / `clang` (usually preinstalled).
+- **No external runtime libraries** — SQLite is compiled in; the GUI uses `eframe`/`wgpu`.
 
 ---
 
 ## Building
 
-The project uses **Gradle** (wrapper committed, so no local Gradle install is needed):
-
 ```bash
-./gradlew build          # compile + tests + fat JAR + portable layout (& zip)
-./gradlew test           # run the unit tests only
-./gradlew assemblePortable   # rebuild just the portable folder + zip
+cargo build --release   # optimized binary at target/release/ip-parser(.exe)
+cargo test              # run the unit tests
 ```
 
-Artifacts:
-- `build/libs/ip-parser-all.jar` — single executable fat JAR (SQLite bundled).
-- `build/portable/ip-parser-<version>/` — self-contained portable folder.
-- `build/portable/ip-parser-<version>-portable.zip` — archived portable folder.
+> On Windows, if your default toolchain is GNU and `gcc` is missing, build with
+> the MSVC toolchain: `cargo +stable-x86_64-pc-windows-msvc build --release`.
+
+The binary is fully self-contained (SQLite bundled).
 
 ---
 
-## Running (portable)
+## Running
 
-The portable folder produced by Gradle is fully self-contained:
-
+```bash
+cargo run --release
 ```
-ip-parser-<version>/
-  ip-parser-<version>-all.jar   application (SQLite bundled)
-  run.bat / run.sh              launchers
-  logs/                         auto-created log files
-  data/                         auto-created SQLite DB (settings.db)
-```
-
-- **Windows**: double-click `run.bat`.
-- **Linux / macOS**: `chmod +x run.sh && ./run.sh`.
 
 The program **never writes to the current working directory**. Its own home is
-the folder the JAR lives in (or the `-Dipparser.home=` folder set by the
-launchers), so you can move the whole folder anywhere — it keeps its own
-settings and logs with it.
+the folder the executable lives in (or the `IPPARSER_HOME` environment
+variable), so you can move the whole folder anywhere — it keeps its own
+settings and logs with it:
+
+```
+ip-parser(.exe)
+data/settings.db        auto-created SQLite settings store
+logs/ipparser-app.log   central application log
+logs/scan-*.log         one file per scan run
+```
 
 ---
 
 ## Architecture
 
-A layered project under `src/main/java/dev/ipparser/`:
+A Rust workspace crate under `src/`, with a `lib` crate (all logic) and a `bin`
+crate (the egui GUI):
 
-| Layer | Package | Purpose |
-|---|---|---|
-| `core` | `dev.ipparser.core` | `AppPaths` (own home dir), `IpUtils`, `PerfMonitor`, `Version` |
-| `pattern` | `dev.ipparser.pattern` | `IpPattern` (regex/CIDR expansion), `SyntaxConv` (type conversion) |
-| `probe` | `dev.ipparser.probe` | `McProbe` (Minecraft Server List Ping protocol) |
-| `scanner` | `dev.ipparser.scanner` | `AbstractScanner` (shared 3-stage pipeline), `PortScanner`, `McProbeScanner` |
-| `storage` | `dev.ipparser.storage` | `AppDb` (SQLite settings), `FileLog` (per-scan logs) |
-| `gui` | `dev.ipparser.gui` | `Main`, `IpParserFrame`, theme, dialogs, filters (`McFilters`), export (`Export`) |
-| `gui.components` | `dev.ipparser.gui.components` | custom Swing widgets (buttons, gauges, progress bar) |
+| Module | Purpose |
+|---|---|
+| `app_paths` | own home dir resolution (`IPPARSER_HOME` → exe dir → CWD) |
+| `ip_utils` | public/private IP classification, LAN detection, "Status 2" verdicts |
+| `perf` | process CPU/RAM + socket traffic counters |
+| `version`, `timefmt` | version string and UTC timestamp formatting (pure `std`) |
+| `syntax_conv` | `ip` / `wildcard` / `regex` input → internal regex (CIDR-aware) |
+| `ip_pattern` | regex/CIDR expansion into octet value lists, counts, structural checks |
+| `mc_probe` | Minecraft Server List Ping protocol (VarInt, JSON extraction, no JSON lib) |
+| `scanner` | three-stage pipeline (generators → network workers → event forwarder) |
+| `storage` | SQLite key/value settings store (`rusqlite`, bundled) + file logger |
+| `filters` | pure MC-probe log-filter logic (online/version/brand/MOTD/players) |
+| `log_config` | log/filter settings group, persisted to SQLite |
+| `export` | export-file content builder |
+| `theme` | dark palette + gauge/gradient/number-format helpers |
+| `main` (bin) | the egui window, dialogs and gauges |
 
 ### Scan pipeline
 
 ```
-[Generators (CPU)] → bounded task queue (8192) → [Network workers (≤1024)] → bounded result queue → [Parsers (CPU)] → GUI + FileLog
+[Generators (CPU)] → bounded task queue (8192) → [Network workers (≤1024)] → bounded result queue → [Forwarder] → GUI + FileLog
 ```
 
-Generators, network workers and parsers run simultaneously; blocking `put` into
-bounded queues provides natural backpressure — no busy-waiting, constant memory,
-UI never blocked.
+Generators, network workers and the forwarder run simultaneously; blocking send
+into bounded queues provides natural backpressure — no busy-waiting, constant
+memory, UI never blocked.
 
 ### Persistence
 
-- **SQLite** (`data/settings.db`, via the bundled `org.xerial:sqlite-jdbc`)
-  replaces the old plain-text `settings.txt`. `AppDb` is a thread-safe key/value
-  store; `LogConfig` groups the GUI's log/filter settings.
+- **SQLite** (`data/settings.db`, bundled via `rusqlite`) stores the user's
+  settings; `LogConfig` groups the GUI's log/filter settings.
 - **Logs** (`logs/`): a central `ipparser-app.log` plus a dedicated
-  `scan-<timestamp>.log` per scan, written by `FileLog`.
+  `scan-<timestamp>.log` per scan.
 
 ---
 
@@ -133,20 +137,19 @@ parse/gen (CPU) + net (up to 1024).
 
 ## Tests
 
-Unit tests live under `src/test/java` and cover:
+```bash
+cargo test
+```
 
-- `IpPattern` — CIDR counts/alignment, regex expansion, alternation, invalid input.
-- `SyntaxConv` — ip / wildcard / regex conversion, CIDR on/off.
-- `PortScanner.parsePorts` — single/range/clamping/garbage.
-- `McProbe` — color-code stripping and JSON unescaping.
-- `McFilters` — online/version/brand/MOTD/player filters.
-- `Export` — result-file content.
-- `Storage` — SQLite round-trip and per-scan file logs in a sandboxed home.
+Unit tests cover:
 
-Run them with `./gradlew test`.
+- `timefmt` — civil-from-days conversion and timestamp widths.
+- `theme` — number grouping and gradient endpoints.
+- `ip_pattern` / `syntax_conv` / `filters` / `export` — pure logic is exercised
+  through the same code paths the GUI drives.
 
 ---
 
 ## License
 
-[GNU AGPL v3.0](LICENSE).
+[GNU AGPL v3.0](LICENSE).

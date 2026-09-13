@@ -1,21 +1,15 @@
-# Compiled Java classes
-*.class
+# Rust build artifacts
+/target/
 
-# Gradle
-.gradle/
-build/
-out/
-
-# IntelliJ IDEA project files
-.idea/
-*.iml
-
-# Runtime settings (auto-generated; now stored in data/ SQLite)
-settings.txt
+# Runtime data & logs (auto-generated next to the executable)
 data/
 logs/
+settings.txt
 dist/
 
-# OS noise
+# IDE / editor noise
+.idea/
+*.iml
+.vscode/
 .DS_Store
 Thumbs.db

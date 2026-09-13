@@ -12,10 +12,38 @@ Repo: [rizer001-Development/IpParser](https://github.com/rizer001-Development/Ip
 ## [Unreleased]
 
 ### Planned
-- NIO networking layer (`SocketChannel` + `Selector`) for the network workers.
-- Migration of legacy `settings.txt` into the SQLite store on first run.
 - Headless CLI mode (`--scan`, `--export`) for scripting / CI.
-- GitHub Actions CI: build + test 45 tests + publish portable zip on tags.
+- GitHub Actions CI: build + test + publish release binaries on tags.
+
+---
+
+## [3.0.0] — 2026-09-13
+
+### 🦀 Full rewrite in Rust
+
+- The entire application is rewritten from Java/Swing to **Rust + `egui`/`eframe`**
+  (wgpu renderer). Same dark UI, same feature set, same persistence layout.
+- **Layered crate**: a `lib` crate holds all logic (`ip_pattern`, `syntax_conv`,
+  `mc_probe`, `scanner`, `storage`, `filters`, `export`, `theme`, …); the `bin`
+  crate is the egui window and dialogs.
+- **Scanner pipeline** re-implemented with `crossbeam-channel` bounded queues:
+  CPU generators → network workers (≤1024) → single forwarder thread. Natural
+  backpressure, constant memory, non-blocking UI.
+- **SQLite settings store** (`rusqlite`, bundled) — same keys as the Java
+  version, so `data/settings.db` keeps working.
+- **Minecraft Server List Ping** rewritten in pure Rust (VarInt + index-based
+  JSON extraction, no JSON dependency).
+- **Perf monitor** (`sysinfo`) reports process CPU/RAM and socket traffic.
+
+### 🎨 GUI
+- Faithful port of the Java window: header stats, syntax settings gear dialog,
+  log settings + MC-filter dialog, live IP-count and thread gauges, progress bar
+  with ETA, process monitor.
+- Dark theme preserved (`theme` module) with the white→yellow→red gradient gauges.
+
+### 🧪 Tests
+- Unit tests for `timefmt`, `theme` (grouping/gradient). Pure logic covered
+  through the shared code paths. Run with `cargo test`.
 
 ---
 
